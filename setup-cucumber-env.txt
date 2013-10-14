@@ -1,0 +1,80 @@
+[for Ubuntu 12.04 only]
+
+==============================================
+I. How to install Cucumber dev environment ?
+==============================================
+
+0. log on as common user(not root)
+1. install compile library 
+sudo apt-get install build-essential curl zlib1g-dev libreadline-dev
+sudo apt-get install libssl-dev libxml2-dev libxslt-dev sqlite3 libsqlite3-dev
+
+2. install Git
+sudo apt-get install git-core
+
+3. clear default ruby packages come with ubuntu
+  (see http://stackoverflow.com/a/9056395/497756)
+You have broken version of RVM. Ubuntu does something to RVM that produces lots of errors, the only safe way of fixing for now is to:
+
+sudo apt-get --purge remove ruby-rvm
+sudo rm -rf /usr/share/ruby-rvm /etc/rvmrc /etc/profile.d/rvm.sh
+
+open new terminal and validate environment is clean from old RVM settings (should be no output):
+
+env | grep rvm
+
+4. install RVM(Ruby Version Management)
+curl -L https://get.rvm.io  | bash
+
+5. add RVM path
+   vi ~/.profile
+   export PATH=$PATH:~/.rvm/bin
+  
+   source ~/.profile
+
+6. install ruby
+   rvm install ruby-1.9.3-p0
+
+7. change terminal preference(see https://rvm.io/integration/gnome-terminal)
+   select Edit --> Profile Preference --> Title and Command --> set the 'Run command as login shell' checkbox
+
+8. run "rvm --default ruby-1.9.3-p0"
+
+9. install ruby-mysql package
+   sudo apt-get install libmysqlclient-dev
+   gem install mysql2
+
+10. install ruby-php-serialize package
+   gem install php_serialize
+
+11. install Bundler
+   gem install bundler
+
+
+12. install other gems
+   gem install cucumber
+   gem install capybara
+
+13. checkout the source code, and get into $ROOT/web/test/cucumber
+    run commdand "bundle update"
+
+===========================   
+II. Install WebDriver
+===========================
+1. Firefox webdriver
+
+this is default webdriver and does not need any setup & configuration
+
+2. Google Chrome webdriver
+
+- install google chrome from official website
+- download binary webdirver at http://code.google.com/p/chromedriver/downloads/list
+- unzip it and copy to /usr/bin/
+
+3. Capybara-webkit webdriver
+
+- follow this guide line to install capybara-webit 
+  https://github.com/thoughtbot/capybara-webkit/wiki/Installing-Qt-and-compiling-capybara-webkit
+
+
+

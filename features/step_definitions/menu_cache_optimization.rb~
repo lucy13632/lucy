@@ -1,0 +1,173 @@
+class Mydb
+    def initialize
+       @dbhost  = "127.0.0.1"
+       @webhost = "http://popsugar.local.onsugar.com" 
+       @apcpath = "/test/cucumber/apctool.php"
+    end
+
+    def getWebHost
+       return @webhost
+    end 
+    
+    def getPOPIP
+	require 'resolv'
+        popip = Resolv.getaddress @webhost
+        return popip
+    end
+
+    def getAPCmenuPath
+        require 'httparty'
+        webip = getPOPIP
+        url = 'http://' + webip + @apcpath
+        response = HTTParty.get(url)
+        data = response.parsed_response
+        return data
+    end
+
+    def updateUserPassword(user)
+       pass = '$2a$07$9EuPVrgsYnSefsSHgDVjnO61KhMEqIu2uz97HqoUOQ9BSmL5wifiu'
+       salt = '9EuPVrgsYnSefsSHgDVjnS'
+       client = Mysql2::Client.new(:host => @dbhost, :username => "root", :database => 'drupal')
+       querystr1 = "update users set pass='" + pass + "' where name='" + user + "'"
+       querystr2 = "update users set salt='" + salt + "' where name='" + user + "'"
+       results = client.query(querystr1)
+       results = client.query(querystr2)
+    end
+
+    def get_user_id(user)
+       # get uid, locale_name from users and combine them together
+       client = Mysql2::Client.new(:host => @dbhost, :username => "root", :database => 'drupal')
+       if user == 'anonymouse'
+          @user_id = 'edit:menu:0:en_US'
+       else
+          querystr = "select uid, locale_name from users where name = '" + user + "'"
+          results = client.query(querystr)
+          results.each(:as => :array) do | row |
+	    @user_id = row
+          end
+          @user_id = @user_id[0].to_s() + ':' + @user_id[1]
+       end
+    end
+    
+    def get_user_paths(user)
+       paths = ''
+       if user == 'anonymouse'
+           paths = getAPCmenuPath
+           paths = PHP.unserialize(paths) 
+       else
+           client = Mysql2::Client.new(:host => @dbhost, :username => "root", :database => 'drupal')
+           querystr = "select data from edit_cache_menu where cid ='" + @user_id + "'"
+           results = client.query(querystr)
+           results.each(:as => :array) do | row |
+               paths = row
+           end
+           paths = PHP.unserialize(paths[0]) 
+       end
+
+       # retieve relative paths
+       paths = paths['callbacks']
+       @path_array = []
+       paths.each do |k, v|
+          # @path_array is an array contains all cached menu paths
+          @path_array << k 
+       end
+    end
+
+    def getCachePaths
+       return @path_array
+    end
+end
+
+module CachedMenuPaths
+    def my_paths(user)
+       @my_paths ||= Paths.new
+    end
+    
+    def my_db
+       @my_db ||= Mydb.new
+    end
+
+    def setFirefoxDriver
+	Capybara.default_driver = :selenium
+	Capybara.register_driver :selenium do |app|
+		Capybara::Selenium::Driver.new(app, :browser => :firefox)
+	end
+    end 
+
+    def setChromeDriver  
+	Capybara.default_driver = :selenium
+	Capybara.register_driver :selenium do |app|
+		Capybara::Selenium::Driver.new(app, :browser => :chrome)
+	end
+    end
+
+    def poltergeist  
+	Capybara.javascript_driver = :poltergeist
+    end
+
+    def setWebKitDriver
+	Capybara.default_driver = :webkit
+	Capybara.javascript_driver = :webkit
+	Capybara.register_driver :webkit_ignore_ssl do |app|
+	  browser = Capybara::Webkit::Browser.new(Capybara::Webkit::Connection.new).tap do |browser|
+	    browser.ignore_ssl_errors
+	  end
+	  Capybara::Webkit::Driver.new(app, :browser => browser)
+	end
+	Capybara.javascript_driver = :webkit_ignore_ssl
+    end
+end
+
+World(CachedMenuPaths)
+
+Given /^I log on as (.*) and (.*) in home page$/ do |user, password|
+  
+  setChromeDriver
+  webhost = my_db.getWebHost
+  if user == 'anonymouse'
+     setWebKitDriver
+     visit webhost
+  else
+     setFirefoxDriver
+     #setChromeDriver
+     visit 'http://popsugar.local.onsugar.com/'
+     find("#signup").click
+     fill_in 'edit-name', :with => user
+     fill_in 'edit-pass', :with => password
+     click_button 'Log In'
+  end
+end
+
+Then /^I should see (.*) in web page$/ do |user|
+  if user != 'anonymouse'
+     sleep 10
+     expect(page).to have_content user
+  end
+end
+
+When /^I get cached menu paths from database for (.*)$/ do | user |
+  my_db.get_user_id(user) 
+  my_db.get_user_paths(user)
+end
+
+Then /^I verify each cacehd menu path is valid for (.*)$/ do | user |
+  p ""
+  cached_paths = my_db.getCachePaths
+  cached_paths.each do | path |
+      url = my_db.getWebHost + "/" + path
+      begin 
+	  visit url
+
+	  if page.has_content?('Boo. Page cannot be found.') == true
+	     p user + ":404:" + url
+	  elsif page.has_content?("Access Denied") == true
+	     p user + ":Deny:" + url
+	  else
+	     p user + ":PASS:" + url 
+	  end
+      rescue Exception => e
+	   p user + ":Exception:" + url 
+           p "    Exception Detail:" + e.message
+      end
+  end
+end
